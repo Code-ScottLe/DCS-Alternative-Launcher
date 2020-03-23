@@ -22,7 +22,7 @@ namespace DCS.Alternative.Launcher.Plugins.Settings.Views.Viewports
     public class ViewportSettingsViewModel : SettingsCategoryViewModelBase
     {
         public ViewportSettingsViewModel(SettingsController controller)
-            : base("VIEWPORTS", controller)
+            : base("    VIEWPORTS", controller)
         {
             RemoveModuleViewportCommand = new ReactiveCommand(SelectedModuleViewport.Select(i => i != null), false);
             RemoveModuleViewportCommand.Subscribe(OnRemoveModuleViewport);
@@ -109,7 +109,7 @@ namespace DCS.Alternative.Launcher.Plugins.Settings.Views.Viewports
 
                 foreach (var i in await Controller.GetInstalledAircraftModulesAsync())
                 {
-                    if (!viewportTemplates.Any(vt => vt.ModuleId == i.ModuleId))
+                    if (viewportTemplates.All(vt => vt.ModuleId != i.ModuleId))
                     {
                         continue;
                     }

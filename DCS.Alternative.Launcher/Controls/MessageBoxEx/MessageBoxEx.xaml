@@ -66,10 +66,24 @@
         </Style>
     </Window.Resources>
     <Grid Margin="20">
-        <Border Background="#FF000000" Effect="{StaticResource MaterialDesignShadowDepth3}" />
+        <Border Effect="{StaticResource MaterialDesignShadowDepth3}">
+            <Border x:Name="PART_Background"
+                    Background="#FF282B30"
+                    BorderBrush="{StaticResource BorderAccentBrush}"
+                    BorderThickness="1"
+                    Effect="{StaticResource MaterialDesignShadowDepth3}">
+                <Border Opacity="0.5">
+                    <Border.Background>
+                        <ImageBrush AlignmentX="Right"
+                                    ImageSource="/Images/SplashBackground.png"
+                                    Stretch="UniformToFill" />
+                    </Border.Background>
+                </Border>
+            </Border>
+        </Border>
 
         <fluentWpf:AcrylicPanel NoiseOpacity="0"
-                                Target="{x:Static windows:MainWindow.AcrylicSource}"
+                                Target="{Binding ElementName=PART_Background}"
                                 TintColor="#33000000"
                                 TintOpacity="1">
             <Grid>

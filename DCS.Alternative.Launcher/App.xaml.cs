@@ -13,6 +13,7 @@ using System.Windows.Threading;
 using CommandLine;
 using DCS.Alternative.Launcher.Analytics;
 using DCS.Alternative.Launcher.Controls;
+using DCS.Alternative.Launcher.Controls.MessageBoxEx;
 using DCS.Alternative.Launcher.Diagnostics;
 using DCS.Alternative.Launcher.Diagnostics.Trace;
 using DCS.Alternative.Launcher.Diagnostics.Trace.Listeners;
@@ -46,6 +47,7 @@ namespace DCS.Alternative.Launcher
         private IContainer _container;
         private MainWindow _mainWindow;
         private SplashScreen _splashScreen;
+        private ApplicationEventRegistry _eventRegistry;
 
         public App()
         {
@@ -62,15 +64,7 @@ namespace DCS.Alternative.Launcher
             private set;
         }
 
-        [STAThread]
-        private static void Main(string[] args)
-        {
-            Parser.Default.ParseArguments<CommandLineOptions>(args)
-                .WithParsed(Start)
-                .WithNotParsed(_ => Start(new CommandLineOptions()));
-        }
-
-        private static void Start(CommandLineOptions options)
+        public static void Start(CommandLineOptions options)
         {
             if (CheckForUpdate())
             {
@@ -180,7 +174,7 @@ namespace DCS.Alternative.Launcher
         {
             GeneralExceptionHandler.Instance.OnError(e.Exception);
         }
-
+        
         private async void App_Startup(object sender, StartupEventArgs e)
         {
             _splashScreen = new SplashScreen();
@@ -195,22 +189,32 @@ namespace DCS.Alternative.Launcher
 #endif
             Tracer.RegisterListener(new FileLogEventListener(Path.Combine(ApplicationPaths.StoragePath, "debug.log")));
 
+            _eventRegistry = new ApplicationEventRegistry();
             _container = new Container();
             _mainWindow = new MainWindow();
 
+            await Task.WhenAll(RegisterServicesAsync());
+            await Task.WhenAll(CheckForUpdatesAsync());
             await Task.WhenAll(UpdateDefinitionFilesAsync());
-
-            await Task.WhenAll(RegisterServicesAsync(), Task.Delay(1000));
-            await Task.WhenAll(CheckSettingsExistAsync(), Task.Delay(1000));
+            await Task.WhenAll(CheckSettingsExistAsync());
 
             CheckFirstUse();
 
             _mainWindow.DataContext = new MainWindowViewModel(_container);
             _mainWindow.Loaded += _mainWindow_Loaded;
 
-            await Task.WhenAll(InitializePluginsAsync(), Task.Delay(1000));
+            await Task.WhenAll(InitializePluginsAsync(), Task.Delay(250));
+
+            var settingsService = _container.Resolve<ISettingsService>();
 
             _splashScreen.Close();
+
+            if (!settingsService.GetValue(SettingsCategories.Launcher, SettingsKeys.AcknowledgedDisclaimer, false))
+            {
+                MessageBoxEx.Show("DCS Alternative Launcher modifies files that exist in the DCS World game installation folder as well as your Saved Games folder. Please make sure you have backed up your data before using this software. You've been warned.", "DISCLAIMER");
+                settingsService.SetValue(SettingsCategories.Launcher, SettingsKeys.AcknowledgedDisclaimer, true);
+            }
+
             MainWindow = _mainWindow;
             _mainWindow.Show();
 
@@ -218,12 +222,35 @@ namespace DCS.Alternative.Launcher
             Tracker.Instance.SendEvent(AnalyticsCategories.AppLifecycle, AnalyticsEvents.StartupComplete, Version.ToString());
 
         }
+
+        private async Task CheckForUpdatesAsync()
+        {
+            _splashScreen.Status = "Checking for updates...";
+
+            var autoUpdateService = _container.Resolve<IAutoUpdateService>();
+            var result = await autoUpdateService.CheckAsync();
+
+            if (result.IsUpdateAvailable)
+            {
+                if (MessageBoxEx.Show($"Update version {result.UpdateVersion} is available.{Environment.NewLine}{Environment.NewLine}Click YES to install immediately{Environment.NewLine}Click NO to install next time you start the launcher.", "UPDATE AVAILABLE", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+                {
+                    _splashScreen.Status = "Downloading update...";
+
+                    await result.UpdatingTask;
+
+                    Process.Start(Process.GetCurrentProcess().MainModule.FileName);
+                    Current.Shutdown();
+                }
+            }
+        }
+
         private void CheckFirstUse()
         {
             var settingsService = _container.Resolve<ISettingsService>();
             var profileSettingsService = _container.Resolve<IProfileSettingsService>();
 
-            if (profileSettingsService.SelectedProfile == null)
+            if (!File.Exists(Path.Combine(ApplicationPaths.StoragePath, "settings.json")) || 
+                string.IsNullOrEmpty(profileSettingsService.SelectedProfileName))
             {
                 using (var container = _container.GetChildContainer())
                 {
@@ -258,7 +285,7 @@ namespace DCS.Alternative.Launcher
         {
             _splashScreen.Status = "Checking Settings...";
 
-            if (!File.Exists("settings.json"))
+            if (!File.Exists(Path.Combine(ApplicationPaths.StoragePath, "settings.json")))
             {
                 var settingsService = _container.Resolve<ISettingsService>();
                 var installs = InstallationLocator.Locate().ToArray();
@@ -395,6 +422,7 @@ namespace DCS.Alternative.Launcher
 
             Tracer.Info("Registering Services.");
 
+            _container.Register(_eventRegistry);
             _container.Register<IAutoUpdateService, AutoUpdateService>(new AutoUpdateService());
             _container.Register<INavigationService, NavigationService>(new NavigationService(_container, _mainWindow.NavigationFrame));
             _container.Register<ISettingsService, SettingsService>().AsSingleton().UsingConstructor(() => new SettingsService());

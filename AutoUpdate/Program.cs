@@ -1,10 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 
 namespace AutoUpdate
 {
@@ -22,12 +18,13 @@ namespace AutoUpdate
             if (Directory.Exists(updateDirectory))
             {
                 RecursiveUpdate(updateDirectory, directory);
-
+                Directory.Delete(updateDirectory, true);
             }
 
-            Directory.Delete(updateDirectory, true);
-
-            Process.Start(exePath);
+            Process.Start(new ProcessStartInfo(exePath)
+            {
+                UseShellExecute = true
+            });
         }
         
         private static void RecursiveUpdate(string sourceDirectory, string destDirectory)

@@ -1,5 +1,8 @@
 ﻿using System;
 using System.IO;
+#if DEBUG
+using JetBrains.Annotations;
+#endif
 
 namespace DCS.Alternative.Launcher
 {
@@ -8,6 +11,9 @@ namespace DCS.Alternative.Launcher
         private const string ErrorInvalidRange =
             "Cannot perform range assertion on ({0}) because minimum value {1} is greater than maximum value {2}.";
 
+#if DEBUG
+        [ContractAnnotation("halt <= condition: false")]
+#endif
         public static void Require(bool condition, string message)
         {
             if (!condition)
@@ -16,6 +22,9 @@ namespace DCS.Alternative.Launcher
             }
         }
 
+#if DEBUG
+        [ContractAnnotation("halt <= condition: false")]
+#endif
         public static void Require(string parameterName, bool condition, object actualValue, string message)
         {
             if (!condition)
@@ -29,6 +38,9 @@ namespace DCS.Alternative.Launcher
             }
         }
 
+#if DEBUG
+        [ContractAnnotation("halt <= condition: false")]
+#endif
         public static void Require<TException>(bool condition, string message = null)
             where TException : Exception
         {
@@ -43,6 +55,9 @@ namespace DCS.Alternative.Launcher
             }
         }
 
+#if DEBUG
+        [ContractAnnotation("halt <= condition: false")]
+#endif
         public static void RequireIsNotNull(object obj, string message)
         {
             if (obj == null)

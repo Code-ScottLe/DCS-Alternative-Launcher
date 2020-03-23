@@ -67,15 +67,15 @@ namespace DCS.Alternative.Launcher.Data
                         }
                         else if (value is int)
                         {
-                            result = (int) value > 0 ? Visibility.Visible : Visibility.Collapsed;
+                            result = (int)value > 0 ? Visibility.Visible : Visibility.Collapsed;
                         }
                         else if (value is double)
                         {
-                            result = (double) value > 0 ? Visibility.Visible : Visibility.Collapsed;
+                            result = (double)value > 0 ? Visibility.Visible : Visibility.Collapsed;
                         }
                         else if (value is bool)
                         {
-                            result = (bool) value ? Visibility.Visible : Visibility.Collapsed;
+                            result = (bool)value ? Visibility.Visible : Visibility.Collapsed;
                         }
                     }
                 }

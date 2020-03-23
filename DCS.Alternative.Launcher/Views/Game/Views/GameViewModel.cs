@@ -78,17 +78,37 @@ namespace DCS.Alternative.Launcher.Plugins.Game.Views
 
                 if(install == null)
                 {
+                    MessageBoxEx.Show("Could not find a valid DCS World installation.");
                     return;
                 }
 
-                Directory.Delete(Path.Combine(install.SavedGamesPath, "fxo"), true);
-                Directory.Delete(Path.Combine(install.SavedGamesPath, "metashaders"), true);
-                Directory.Delete(Path.Combine(install.SavedGamesPath, "metashaders2"), true);
+                var path = Path.Combine(install.SavedGamesPath, "fxo");
+
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, true);
+                }
+
+                path = Path.Combine(install.SavedGamesPath, "metashaders");
+
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, true);
+                }
+                
+                path = Path.Combine(install.SavedGamesPath, "metashaders2");
+
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, true);
+                }
             }
             catch (Exception e)
             {
                 GeneralExceptionHandler.Instance.OnError(e);
             }
+
+            MessageBoxEx.Show("Shader cache has been cleaned.");
         }
 
         private void OnDcsProcessExited(object sender, EventArgs e)
@@ -237,7 +257,12 @@ namespace DCS.Alternative.Launcher.Plugins.Game.Views
 
         private void OnShowNewsArticle(NewsArticleModel model)
         {
-            Process.Start(model.Url.Value);
+            var ps = new ProcessStartInfo(model.Url.Value)
+            {
+                UseShellExecute = true,
+                Verb = "open"
+            };
+            Process.Start(ps);
         }
 
         private async void OnCheckForUpdates()

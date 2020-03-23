@@ -6,6 +6,7 @@ using DCS.Alternative.Launcher.Diagnostics;
 using DCS.Alternative.Launcher.Diagnostics.Trace;
 using DCS.Alternative.Launcher.DomainObjects;
 using DCS.Alternative.Launcher.ServiceModel;
+using DCS.Alternative.Launcher.Storage.Profiles;
 using Newtonsoft.Json;
 using WpfScreenHelper;
 
@@ -20,7 +21,6 @@ namespace DCS.Alternative.Launcher.Services.Settings
         private Dictionary<string, Option[]> _defaultAdvancedOptionCache;
 
         private DcsOptionsCategory[] _dcsOptions;
-
         private SettingsProfile _selectedProfile;
 
         public ProfileSettingsService(IContainer container)
@@ -35,38 +35,38 @@ namespace DCS.Alternative.Launcher.Services.Settings
             _selectedProfile = profile;
         }
 
-        public SettingsProfile SelectedProfile
+        public string SelectedProfileName
         {
-            get { return _selectedProfile; }
+            get { return _selectedProfile?.Name; }
             set
             {
-                if (_selectedProfile != value)
+                if (_selectedProfile?.Name != value)
                 {
-                    _selectedProfile = value;
-                    _settingsService.SetValue(SettingsCategories.Launcher, SettingsKeys.LastProfileName, value.Name);
+                    var profile = _profiles.FirstOrDefault(p => p.Name == value) ?? _profiles.FirstOrDefault();
+
+                    _selectedProfile = profile;
+                    _settingsService.SetValue(SettingsCategories.Launcher, SettingsKeys.LastProfileName, profile.Name);
+
+                    OnSelectedProfileChanged();
                 }
             }
         }
+
+        public event EventHandler<SelectedProfileChangedEventArgs> SelectedProfileChanged;
+        public event EventHandler ProfilesChanged;
 
         private void Load()
         {
             Tracer.Info("Loading profiles");
 
-            foreach (var profileJson in Directory.GetFiles(ApplicationPaths.ProfilesPath, "*.json"))
+            try
             {
-                try
-                {
-                    var contents = File.ReadAllText(profileJson);
-                    var profile = JsonConvert.DeserializeObject<SettingsProfile>(contents);
-
-                    profile.Path = profileJson;
-
-                    _profiles.Add(profile);
-                }
-                catch (Exception e)
-                {
-                    GeneralExceptionHandler.Instance.OnError(e);
-                }
+                var profiles = SettingsProfileStorageAdapter.GetAll();
+                _profiles.AddRange(profiles);
+            }
+            catch (Exception e)
+            {
+                GeneralExceptionHandler.Instance.OnError(e);
             }
         }
 
@@ -122,6 +122,34 @@ namespace DCS.Alternative.Launcher.Services.Settings
             mv?.Viewports.Clear();
 
             SetValue(ProfileSettingsCategories.Viewports, SettingsKeys.ModuleViewportTemplates, moduleViewports.ToArray());
+        }
+
+        public void RemoveProfile(string profileName)
+        {
+            var profile = _profiles.FirstOrDefault(p => p.Name == profileName);
+
+            if (profile == null)
+            {
+                return;
+            }
+
+            _profiles.Remove(profile);
+
+            File.Delete(profile.Path);
+
+            OnProfilesChanged();
+
+            if (SelectedProfileName == profile.Name)
+            {
+                SelectedProfileName = _profiles.First().Name;
+            }
+        }
+
+        public void AddProfile(SettingsProfile profile)
+        {
+            _profiles.Add(profile);
+            SettingsProfileStorageAdapter.PersistAsync(profile).Wait();
+            OnProfilesChanged();
         }
 
         public void UpsertViewport(string name, string moduleId, Screen screen, Viewport viewport)
@@ -393,6 +421,19 @@ namespace DCS.Alternative.Launcher.Services.Settings
         private static string GetCategory(string id)
         {
             return OptionCategory.All.First(id.Contains);
+        }
+
+        private void OnProfilesChanged()
+        {
+            var handler = ProfilesChanged;
+            handler?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void OnSelectedProfileChanged()
+        {
+            var handler = SelectedProfileChanged;
+
+            handler?.Invoke(this, new SelectedProfileChangedEventArgs(SelectedProfileName));
         }
     }
 }

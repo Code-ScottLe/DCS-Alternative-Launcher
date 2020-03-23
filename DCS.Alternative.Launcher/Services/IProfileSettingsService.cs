@@ -1,12 +1,18 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using DCS.Alternative.Launcher.DomainObjects;
+using DCS.Alternative.Launcher.Services.Settings;
 using WpfScreenHelper;
 
 namespace DCS.Alternative.Launcher.Services
 {
     public interface IProfileSettingsService
     {
-        SettingsProfile SelectedProfile { get; set; }
+        string SelectedProfileName { get; set; }
+
+        event EventHandler<SelectedProfileChangedEventArgs> SelectedProfileChanged;
+
+        event EventHandler ProfilesChanged;
 
         object GetAdvancedOptionDefaultValue(string category, string optionId);
 
@@ -41,5 +47,9 @@ namespace DCS.Alternative.Launcher.Services
         Dictionary<string, ViewportOption[]> GetAllViewportOptions();
 
         void ClearViewports(string name, string moduleId);
+
+        void RemoveProfile(string profileName);
+
+        void AddProfile(SettingsProfile profile);
     }
 }

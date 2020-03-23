@@ -14,7 +14,7 @@ namespace DCS.Alternative.Launcher.Plugins.Settings.Views.General
     public class InstallationSettingsViewModel : SettingsCategoryViewModelBase
     {
         public InstallationSettingsViewModel(SettingsController controller)
-            : base("INSTALLATION", controller)
+            : base("DCS WORLD INSTALLATION", controller)
         {
             RemoveInstallationCommand = new ReactiveCommand(SelectedInstall.Select(i => i != null), false);
 
@@ -142,7 +142,7 @@ namespace DCS.Alternative.Launcher.Plugins.Settings.Views.General
 
                 foreach (var installation in installations)
                 {
-                    if (Installations.All(i => i.ToString() != installation.ToString()))
+                    if (Installations.All(i => i.ConcreteInstall.ToString() != installation.ToString()))
                     {
                         Installations.Add(new InstallLocationModel(installation));
                         addedInstallations.Add(installation.Directory);

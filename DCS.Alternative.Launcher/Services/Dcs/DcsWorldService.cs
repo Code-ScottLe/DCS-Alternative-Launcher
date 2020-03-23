@@ -28,35 +28,42 @@ namespace DCS.Alternative.Launcher.Services.Dcs
         private readonly IContainer _container;
         private readonly ISettingsService _settingsService;
         private readonly IProfileSettingsService _profileSettingsService;
-        private readonly AutoexecLuaContext _autoexecContext;
-        private readonly OptionLuaContext _optionsContext;
+        private readonly Dictionary<string, Module> _modules = new Dictionary<string, Module>();
 
         public DcsWorldService(IContainer container)
         {
             _container = container;
             _settingsService = container.Resolve<ISettingsService>();
             _profileSettingsService = container.Resolve<IProfileSettingsService>();
+            _profileSettingsService.SelectedProfileChanged += _profileSettingsService_SelectedProfileChanged;
+        }
+
+        private void _profileSettingsService_SelectedProfileChanged(object sender, Settings.SelectedProfileChangedEventArgs e)
+        {
+            Tracer.Info("Profile was changed, clearing module cache.");
+            _modules.Clear();
         }
 
         public Task<Module[]> GetInstalledAircraftModulesAsync()
         {
             Tracer.Info("Searching DCS for installed modules.");
-#pragma warning disable CS1998 // This async method lacks 'await' operators and will run synchronously. Consider using the 'await' operator to await non-blocking API calls, or 'await Task.Run(...)' to do CPU-bound work on a background thread.
-            return Task.Run(async () =>
-#pragma warning restore CS1998 // This async method lacks 'await' operators and will run synchronously. Consider using the 'await' operator to await non-blocking API calls, or 'await Task.Run(...)' to do CPU-bound work on a background thread.
+
+            var settingsService = _container.Resolve<ISettingsService>();
+            var install = settingsService.SelectedInstall;
+            
+            if (!install.IsValidInstall)
             {
-                var settingsService = _container.Resolve<ISettingsService>();
-                var modules = new List<Module>();
-                var install = settingsService.SelectedInstall;
-                var autoupdateModules = new List<string>(install.Modules);
+                Tracer.Info("Current install is invalid, aborting...");
+                return Task.FromResult(_modules.Values.ToArray());
+            }
 
-                autoupdateModules.Add("Su-25T");
-                autoupdateModules.Add("TF-51D");
-
-                if (!install.IsValidInstall)
+            return Task.Run(() =>
+            {
+                var autoUpdateModules = new List<string>(install.Modules)
                 {
-                    return modules.ToArray();
-                }
+                    "Su-25T",
+                    "TF-51D"
+                };
 
                 var aircraftFolders = Directory.GetDirectories(Path.Combine(install.Directory, "Mods//aircraft"));
 
@@ -80,16 +87,21 @@ namespace DCS.Alternative.Launcher.Services.Dcs
                                 function dofile() end
                                 function plugin_done() end
                                 function make_flyable() end
+                                function MAC_flyable() end
+                                function turn_on_waypoint_panel() end
                                 AV8BFM = {}
                                 F86FM = {}
                                 F5E = {}
                                 FA18C = {}
                                 F15FM = {}
+                                F16C = {}
                                 FM = {}
                                 M2KFM = {}
                                 Mig15FM = {}
                                 MIG19PFM = {}
                                 SA342FM = {}
+                                JF17_FM = {}
+                                function add_plugin_systems() end
                                 " + $"__DCS_VERSION__ = \"{install.Version}\"");
 
                         var directoryName = Path.GetDirectoryName(folder);
@@ -107,27 +119,39 @@ namespace DCS.Alternative.Launcher.Services.Dcs
                                 return;
                             }
 
-                            if (description.Keys.OfType<string>().All(k => k != "update_id"))
+                            moduleId = 
+                                description.Keys.OfType<string>().All(k => k != "update_id") 
+                                    ? description["fileMenuName"]?.ToString()
+                                    : description["update_id"]?.ToString();
+
+                            var skinsTable = description["Skins"] as LuaTable;
+
+                            if (skinsTable != null)
                             {
-                                moduleId = description["fileMenuName"]?.ToString();
-                            }
-                            else
-                            {
-                                moduleId = description["update_id"]?.ToString();
+                                skinsPath = ((LuaTable)skinsTable[1])["dir"].ToString();
                             }
 
-                            skinsPath = ((LuaTable)((LuaTable)description["Skins"])[1])["dir"].ToString();
-                            displayName = ((LuaTable)((LuaTable)description["Missions"])[1])["name"].ToString();
+                            var missionsTable = description["Missions"] as LuaTable;
+
+                            if (missionsTable != null)
+                            {
+                                displayName = ((LuaTable) missionsTable[1])["name"].ToString();
+                            }
                         });
 
-                        lua["make_flyable"] = new Action<string, string, LuaTable, string>((a, b, c, d) =>
+                        var makeFlyableAction = new Action<string, string, LuaTable, string>((a, b, c, d) =>
                         {
                             if (displayName.Contains("_hornet"))
                             {
                                 displayName = displayName.Split('_')[0];
                             }
 
-                            if (!string.IsNullOrEmpty(moduleId) && autoupdateModules.Contains(moduleId) && moduleId != "FC3")
+                            if (_modules.ContainsKey($"{moduleId}_{a}"))
+                            {
+                                return;
+                            }
+
+                            if (!string.IsNullOrEmpty(moduleId) && autoUpdateModules.Contains(moduleId) && moduleId != "FC3")
                             {
                                 var module = new Module
                                 {
@@ -139,23 +163,53 @@ namespace DCS.Alternative.Launcher.Services.Dcs
                                     IconPath = Path.Combine(folder, skinsPath, "icon.png"),
                                     ViewportPrefix = moduleId.ToString().Replace(" ", "_").Replace("-", "_")
                                 };
-                                modules.Add(module);
-                                Tracer.Info($"Found module {displayName}.");
+
+                                _modules.Add($"{moduleId}_{a}", module);
+
+                                Tracer.Debug($"Found module {displayName}.");
+                            }
+                            else if (moduleId == "FC3")
+                            {
+                                //fc3Added = true;
+
+                                var module = new Module
+                                {
+                                    ModuleId = moduleId,
+                                    DisplayName = displayName,
+                                    IsFC3 = true,
+                                    FC3ModuleId = a,
+                                    LoadingImagePath = Path.Combine(folder, skinsPath, "ME", "loading-window.png"),
+                                    MainMenuLogoPath = Path.Combine(folder, skinsPath, "ME", "MainMenulogo.png"),
+                                    BaseFolderPath = folder,
+                                    IconPath = Path.Combine(folder, skinsPath, "icon.png"),
+                                    ViewportPrefix = moduleId.Replace(" ", "_").Replace("-", "_")
+                                };
+
+                                _modules.Add($"{moduleId}_{a}", module);
+
+                                Tracer.Debug($"Found module {displayName} {a}.");
+                            }
+                            else
+                            {
+                                Tracer.Debug($"Not loading module '{moduleId} - {displayName}' parameters ('{a}', '{b}', '{d}'.");
                             }
                         });
 
+                        lua["make_flyable"] = makeFlyableAction;
+                        lua["MAC_flyable"] = makeFlyableAction;
+                        
                         try
                         {
                             lua.DoFile(entryPath);
                         }
                         catch (Exception e)
                         {
-                            Tracer.Error(e);
+                            Tracer.Error(e.Message);
                         }
                     }
                 }
 
-                return modules.ToArray();
+                return _modules.Values.ToArray();
             });
         }
 
@@ -198,7 +252,7 @@ namespace DCS.Alternative.Launcher.Services.Dcs
 
         public AdditionalResource[] GetAdditionalResourcesByModule(string moduleId)
         {
-            var path = Path.Combine(ApplicationPaths.ApplicationPath, "Resources/Resources/AdditionalResources.json");
+            var path = "Data\\Resources\\AdditionalResources.json";
             var contents = File.ReadAllText(path);
             var resourceLookup = JsonConvert.DeserializeObject<Dictionary<string, AdditionalResource[]>>(contents);
 
@@ -206,34 +260,19 @@ namespace DCS.Alternative.Launcher.Services.Dcs
             contents = File.ReadAllText(path);
 
             var customResourceLookup = JsonConvert.DeserializeObject<Dictionary<string, AdditionalResource[]>>(contents);
+            var resources = new Dictionary<string, AdditionalResource>();
 
-            foreach (var kvp in customResourceLookup)
+            if (resourceLookup.TryGetValue(moduleId, out var a))
             {
-                var options = new List<AdditionalResource>();
-
-                if (resourceLookup.ContainsKey(kvp.Key))
-                {
-                    options.AddRange(resourceLookup[kvp.Key]);
-                }
-
-                foreach (var option in kvp.Value)
-                {
-                    var existingOption = options.FirstOrDefault(o => o.Name == option.Name);
-
-                    if (existingOption == null)
-                    {
-                        options.Add(option);
-                    }
-                    else
-                    {
-                        options[options.IndexOf(existingOption)] = option;
-                    }
-                }
-
-                resourceLookup[kvp.Key] = options.ToArray();
+                Array.ForEach(a, v => resources[v.Name] = v);
             }
 
-            return resourceLookup.TryGetValue(moduleId, out var resources) ? resources : new AdditionalResource[0];
+            if (customResourceLookup.TryGetValue(moduleId, out var b))
+            {
+                Array.ForEach(b, v => resources[v.Name] = v);
+            }
+
+            return resources.Values.ToArray();
         }
 
         public Task<NewsArticleModel[]> GetLatestNewsArticlesAsync(int count = 10)
@@ -326,17 +365,19 @@ namespace DCS.Alternative.Launcher.Services.Dcs
                         {
                             foreach (var option in category.Options)
                             {
-                                if (_profileSettingsService.TryGetValue<object>(ProfileSettingsCategories.GameOptions, option.Id, out var value))
+                                if (!_profileSettingsService.TryGetValue<object>(ProfileSettingsCategories.GameOptions, option.Id, out var value))
                                 {
-                                    if (option.Id == "options.VR.enabled")
-                                    {
-                                        context.SetValue(category.Id, option.Id, isVr);
-                                    }
-                                    else
-                                    {
-                                        //Tracker.Instance.SendEvent(AnalyticsCategories.DcsOptions, $"{category.Id}_{option.Id}", value.ToString());
-                                        context.SetValue(category.Id, option.Id, value);
-                                    }
+                                    continue;
+                                }
+
+                                if (option.Id == "options.VR.enabled")
+                                {
+                                    context.SetValue(category.Id, option.Id, isVr);
+                                }
+                                else
+                                {
+                                    //Tracker.Instance.SendEvent(AnalyticsCategories.DcsOptions, $"{category.Id}_{option.Id}", value.ToString());
+                                    context.SetValue(category.Id, option.Id, value);
                                 }
                             }
                         }
@@ -403,7 +444,7 @@ namespace DCS.Alternative.Launcher.Services.Dcs
 
                         var originalCode = $"try_find_assigned_viewport(\"{viewport.ViewportName}\")";
 
-                        var code = $"try_find_assigned_viewport(\"{module.ViewportPrefix}_{viewport.ViewportName}\")";
+                        var code = $"try_find_assigned_viewport(\"{module.ViewportPrefix}_{viewport.ViewportName}\", \"{viewport.ViewportName}\")";
 
                         if (!contents.Contains(code))
                         {
