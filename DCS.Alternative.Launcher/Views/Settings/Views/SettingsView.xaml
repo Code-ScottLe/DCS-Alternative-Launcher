@@ -88,6 +88,10 @@
                             <controls:ProfilesControl Margin="30" />
                         </DataTemplate>
 
+                        <DataTemplate DataType="{x:Type general:LaunchOptionsSettingsViewModel}">
+                            <controls:LaunchOptionControl Margin="30" />
+                        </DataTemplate>
+
                         <DataTemplate DataType="{x:Type viewports:ViewportSettingsViewModel}">
                             <settingsControls:ViewportsSettingsControl Margin="30" />
                         </DataTemplate>

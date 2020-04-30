@@ -2,6 +2,14 @@
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup />
   <ItemGroup>
+    <Compile Update="Controls\LaunchOptionControl.xaml.cs">
+      <SubType>Code</SubType>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Update="Controls\LaunchOptionControl.xaml">
+      <SubType>Designer</SubType>
+    </Page>
     <Page Update="Controls\ProfilesControl.xaml">
       <SubType>Designer</SubType>
     </Page>

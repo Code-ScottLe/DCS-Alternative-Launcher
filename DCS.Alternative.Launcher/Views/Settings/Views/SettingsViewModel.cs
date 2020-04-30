@@ -63,6 +63,7 @@ namespace DCS.Alternative.Launcher.Plugins.Settings.Views
             Categories.Add(new CategoryHeaderSettingsViewModel("APPLICATION SETTINGS"));
             Categories.Add(new InstallationSettingsViewModel(_controller));
             Categories.Add(new ProfileSettingsViewModel(_controller));
+            Categories.Add(new LaunchOptionsSettingsViewModel(_controller));
 
             await PopulateProfileSettingsAsync();
 
